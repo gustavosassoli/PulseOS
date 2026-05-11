@@ -1,0 +1,110 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email']) &&
+             data.uid == request.auth.uid &&
+             data.email is string && data.email.size() <= 200;
+    }
+
+    function isUserProfileImmutable(incoming, existing) {
+      return incoming.uid == existing.uid &&
+             incoming.email == existing.email;
+    }
+
+    function isValidAgenda(data) {
+      return data.keys().hasAll(['uid', 'title', 'category', 'time']) &&
+             data.uid == request.auth.uid &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.category in ['Trabalho', 'Saúde', 'Pessoal'] &&
+             data.time is string && data.time.size() <= 10;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['uid', 'name', 'amount', 'type']) &&
+             data.uid == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.amount is number &&
+             data.type in ['debit', 'credit'];
+    }
+
+    function isValidMeal(data) {
+      return data.keys().hasAll(['uid', 'name', 'calories']) &&
+             data.uid == request.auth.uid &&
+             data.name is string && data.name.size() <= 200 &&
+             data.calories is number &&
+             (data.get('weight', 100) is number);
+    }
+
+    function isValidWorkoutSession(data) {
+      return data.keys().hasAll(['uid', 'date', 'title', 'exercises']) &&
+             data.uid == request.auth.uid &&
+             data.date is string && data.date.size() <= 50 &&
+             data.title is string && data.title.size() <= 200 &&
+             data.exercises is list && data.exercises.size() <= 50 &&
+             (data.exercises.size() == 0 || data.exercises[0] is map);
+    }
+
+    // Rules
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUserProfile(incoming());
+      allow update: if isOwner(userId) && isValidUserProfile(incoming()) && isUserProfileImmutable(incoming(), existing());
+
+      match /agenda/{itemId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && isValidId(itemId);
+        allow create: if isValidAgenda(incoming());
+        allow update: if isValidAgenda(incoming()) && incoming().uid == existing().uid;
+      }
+
+      match /transactions/{transactionId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && isValidId(transactionId);
+        allow create: if isValidTransaction(incoming());
+        allow update: if isValidTransaction(incoming()) && incoming().uid == existing().uid;
+      }
+
+      match /meals/{mealId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && isValidId(mealId);
+        allow create: if isValidMeal(incoming());
+        allow update: if isValidMeal(incoming()) && incoming().uid == existing().uid;
+      }
+
+      match /workoutSessions/{sessionId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && isValidId(sessionId);
+        allow create: if isValidWorkoutSession(incoming());
+        allow update: if isValidWorkoutSession(incoming()) && incoming().uid == existing().uid;
+      }
+    }
+  }
+}

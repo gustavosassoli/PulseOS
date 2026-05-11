@@ -1,0 +1,162 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "Perfil do Usuário",
+      "description": "Dados privados do usuário",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "lifeScore": { "type": "number" },
+        "calorieGoal": { "type": "string" },
+        "targetWeight": { "type": "string" },
+        "currentWeight": { "type": "string" },
+        "trainingFocus": { "type": "string", "enum": ["lose", "gain"] },
+        "gender": { "type": "string", "enum": ["male", "female"] },
+        "monthlyBudget": { "type": "string" },
+        "weightHistory": { 
+          "type": "array",
+          "items": { "$ref": "#/entities/WeightHistory" }
+        },
+        "workoutPlan": { 
+          "type": "array",
+          "items": { "$ref": "#/entities/WorkoutDay" }
+        },
+        "badges": { 
+          "type": "array",
+          "items": { "$ref": "#/entities/Badge" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "WeightHistory": {
+      "title": "Histórico de Peso",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "weight": { "type": "number" }
+      }
+    },
+    "WorkoutDay": {
+      "title": "Plano de Treino Diário",
+      "type": "object",
+      "properties": {
+        "day": { "type": "string" },
+        "title": { "type": "string" },
+        "exercises": { 
+          "type": "array",
+          "items": { "$ref": "#/entities/WorkoutExercise" }
+        }
+      }
+    },
+    "WorkoutExercise": {
+      "title": "Exercício de Treino",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "sets": { "type": "number" },
+        "reps": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "muscles": { "type": "string" },
+        "gifUrl": { "type": "string" }
+      }
+    },
+    "WorkoutSession": {
+      "title": "Sessão de Treino",
+      "description": "Registro de um treino realizado",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "date": { "type": "string" },
+        "dayName": { "type": "string" },
+        "title": { "type": "string" },
+        "exercises": { 
+          "type": "array",
+          "items": { "$ref": "#/entities/WorkoutExercise" }
+        },
+        "completed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "date", "title", "exercises"]
+    },
+    "Badge": {
+      "title": "Conquista",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "earnedAt": { "type": "string" },
+        "category": { "type": "string", "enum": ["workout", "diet", "consistency", "finance"] }
+      }
+    },
+    "AgendaItem": {
+      "title": "Item da Agenda",
+      "description": "Tarefa ou evento agendado",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["Trabalho", "Saúde", "Pessoal"] },
+        "time": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "title", "category", "time"]
+    },
+    "Transaction": {
+      "title": "Transação Financeira",
+      "description": "Entrada ou saída de dinheiro",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["debit", "credit"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "amount", "type"]
+    },
+    "Meal": {
+      "title": "Refeição",
+      "description": "Registro de alimentação",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["Café da Manhã", "Almoço", "Jantar", "Lanche"] },
+        "calories": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "calories"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Documento do perfil do usuário"
+    },
+    "/users/{userId}/agenda/{itemId}": {
+      "schema": "AgendaItem",
+      "description": "Itens da agenda do usuário"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Transações financeiras do usuário"
+    },
+    "/users/{userId}/meals/{mealId}": {
+      "schema": "Meal",
+      "description": "Refeições do usuário"
+    },
+    "/users/{userId}/workoutSessions/{sessionId}": {
+      "schema": "WorkoutSession",
+      "description": "Sessões de treino do usuário"
+    }
+  }
+}
