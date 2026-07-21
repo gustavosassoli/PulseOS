@@ -9,15 +9,29 @@ import {
   awardBadge,
   updateUserProfile 
 } from '../services/firestore';
+import { auth } from '../firebase';
+import { useLifeScoreStore } from '../stores/useLifeScoreStore';
+import { recalculateAndSave } from '../services/lifeScoreService';
+import ExerciseSearchDropdown from './ExerciseSearchDropdown';
+import ExerciseCard from './ExerciseCard';
+import ExerciseSearchModal from './ExerciseSearchModal';
+import { enrichMissingGifUrls } from '../utils/enrichExercises';
 import { suggestWorkoutAdjustment, WorkoutInsight, generateFullWorkoutPlan } from '../services/aiService';
+import StreakBadge from './streaks/StreakBadge';
+import { updateStreak } from '../services/streakService';
 
 const DAYS_OF_WEEK = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
 
 export default function Workout() {
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [workoutPlan, setWorkoutPlan] = useState<WorkoutDay[]>([]);
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [newBadge, setNewBadge] = useState<Badge | null>(null);
   const [isConfigMode, setIsConfigMode] = useState(false);
+  
+  const [isGifModalOpen, setIsGifModalOpen] = useState(false);
+  const [currentGifSearchParam, setCurrentGifSearchParam] = useState<{ id: string; name: string } | null>(null);
+  const [isEnriching, setIsEnriching] = useState(false);
   
   const [today, setToday] = useState(new Date().toISOString().split('T')[0]);
 
@@ -38,6 +52,7 @@ export default function Workout() {
 
   useEffect(() => {
     const unsubscribeProfile = subscribeToUserProfile((data) => {
+      setUserProfile(data as UserProfile);
       if (data.workoutPlan) {
         setWorkoutPlan(data.workoutPlan);
         setTempWorkoutPlan(data.workoutPlan);
@@ -120,16 +135,65 @@ export default function Workout() {
     await addWorkoutSession(newSession);
   };
 
+  const saveGifUrlForExercise = async (gifUrl: string, muscles: string, calorieEstimate: number) => {
+    if (!currentGifSearchParam || !auth.currentUser) return;
+    
+    // Update daily session if exists
+    if (todaySession) {
+      const updatedExercises = todaySession.exercises.map(ex => 
+        ex.id === currentGifSearchParam.id ? { ...ex, gifUrl, muscles: muscles || ex.muscles, caloriesBurned: calorieEstimate || ex.caloriesBurned } : ex
+      );
+      await updateWorkoutSession(todaySession.id, { exercises: updatedExercises });
+    }
+
+    // Update global workoutPlan
+    const newPlan = workoutPlan.map(p => ({
+        ...p,
+        exercises: p.exercises.map(ex => 
+            ex.name === currentGifSearchParam.name ? { ...ex, gifUrl, muscles: muscles || ex.muscles, caloriesBurned: calorieEstimate || ex.caloriesBurned } : ex
+        )
+    }));
+    await updateUserProfile({ workoutPlan: newPlan });
+  };
+
+  const handleEnrichGifs = async () => {
+    if (!auth.currentUser) return;
+    setIsEnriching(true);
+    const { updated } = await enrichMissingGifUrls(auth.currentUser.uid);
+    setIsEnriching(false);
+    useLifeScoreStore.getState().showToast(`${updated} exercícios atualizados! ✦`, 'CheckCircle', 0);
+  };
+
+  const missingGifsCount = workoutPlan.reduce((acc, plan) => {
+    return acc + plan.exercises.filter(ex => !ex.gifUrl).length;
+  }, 0);
+
   const toggleExercise = async (exerciseId: string) => {
     if (!todaySession) return;
     const updatedExercises = todaySession.exercises.map(ex => 
       ex.id === exerciseId ? { ...ex, completed: !ex.completed } : ex
     );
     const allDone = updatedExercises.every(ex => ex.completed);
+    
+    // Find the toggled exercise to know if we completed it just now
+    const toggledEx = updatedExercises.find(ex => ex.id === exerciseId);
+    if (toggledEx && toggledEx.completed) {
+      if (allDone) {
+        useLifeScoreStore.getState().showToast('Treino Concluído!', 'FitnessCenter', 0);
+      } else {
+        useLifeScoreStore.getState().showToast('Exercício Concluído', 'CheckCircle', 0);
+      }
+    }
+
     await updateWorkoutSession(todaySession.id, { 
       exercises: updatedExercises,
       completed: allDone
     });
+    
+    if (auth.currentUser && userProfile) {
+      await updateStreak(auth.currentUser.uid, userProfile, 'treino');
+      recalculateAndSave(auth.currentUser.uid);
+    }
 
     if (allDone) {
       // Award "Foco Total" badge
@@ -235,7 +299,10 @@ export default function Workout() {
   return (
     <div className="space-y-8 pb-10">
       <div className="flex justify-between items-center px-2">
-        <h2 className="text-2xl font-headline font-black text-white uppercase tracking-tight">Treino</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-2xl font-headline font-black text-white uppercase tracking-tight">Treino</h2>
+          <StreakBadge pillar="treino" current={userProfile?.streaks?.treino?.current || 0} />
+        </div>
         <button 
           onClick={() => setIsConfigMode(!isConfigMode)}
           className={`p-2 rounded-full transition-all ${isConfigMode ? 'bg-primary-container text-[#131313]' : 'bg-surface-container hover:bg-surface-container-highest text-[#B9CBB9]'}`}
@@ -281,12 +348,14 @@ export default function Workout() {
                       <div className="p-4 space-y-3">
                         {dayPlan.exercises.map((ex, exIdx) => (
                           <div key={ex.id} className="flex items-center gap-2 bg-surface-container-lowest p-2 rounded-lg">
-                            <input 
-                              type="text" 
-                              placeholder="Exercício"
+                            <ExerciseSearchDropdown
                               value={ex.name}
-                              onChange={(e) => updateExercise(dayIdx, exIdx, 'name', e.target.value)}
-                              className="flex-1 bg-transparent border-none text-sm text-white outline-none"
+                              onChange={(name, muscles, gifUrl, calorieEstimate) => {
+                                updateExercise(dayIdx, exIdx, 'name', name);
+                                if (muscles) updateExercise(dayIdx, exIdx, 'muscles', muscles);
+                                if (gifUrl) updateExercise(dayIdx, exIdx, 'gifUrl', gifUrl);
+                                if (calorieEstimate) updateExercise(dayIdx, exIdx, 'caloriesBurned', calorieEstimate);
+                              }}
                             />
                             <div className="flex items-center gap-1 shrink-0">
                               <input 
@@ -614,83 +683,39 @@ export default function Workout() {
 
             {todaySession && (
               <section className="space-y-4">
+                {missingGifsCount > 0 && !isConfigMode && (
+                  <div className="bg-[#2A2A2A] border border-white/5 rounded-xl p-4 flex items-center justify-between shadow-lg">
+                    <p className="text-sm font-medium text-[#B9CBB9] leading-tight">
+                      Você tem <span className="text-[#00FF88] font-bold">{missingGifsCount} exercícios</span> sem GIF animado.
+                    </p>
+                    <button 
+                      onClick={handleEnrichGifs}
+                      disabled={isEnriching}
+                      className="bg-surface-container-high hover:bg-surface-container-highest transition-colors text-[#00FF88] font-bold text-xs px-4 py-2 rounded-lg border border-[#00FF88]/20 disabled:opacity-50 flex items-center gap-2 shrink-0"
+                    >
+                      {isEnriching ? (
+                        <>
+                          <div className="w-3 h-3 border-2 border-[#00FF88]/30 border-t-[#00FF88] rounded-full animate-spin" />
+                          Atualizando...
+                        </>
+                      ) : (
+                        'Atualizar GIFs'
+                      )}
+                    </button>
+                  </div>
+                )}
                 <h4 className="text-[10px] font-bold text-[#B9CBB9] uppercase tracking-widest px-2">Exercícios do Dia</h4>
                 <div className="grid grid-cols-1 gap-4">
                   {todaySession.exercises.map((ex) => (
-                    <motion.div 
-                      key={ex.id}
-                      onClick={() => toggleExercise(ex.id)}
-                      whileTap={{ scale: 0.98 }}
-                      className={`group relative overflow-hidden rounded-2xl transition-all cursor-pointer border ${
-                        ex.completed 
-                          ? 'bg-primary-container/5 border-primary-container/20 shadow-none' 
-                          : 'bg-surface-container-low border-white/5 hover:bg-surface-container-high shadow-lg hover:shadow-primary-container/10'
-                      }`}
-                    >
-                      <div className="flex flex-col sm:flex-row h-full">
-                        {/* Visual Element */}
-                        <div className="w-full sm:w-28 h-32 sm:h-auto bg-surface-container-highest relative overflow-hidden shrink-0">
-                          <img 
-                            src={ex.gifUrl || `https://images.unsplash.com/photo-1540206351-d6465b3ac5c1?w=300&auto=format&fit=crop`} 
-                            alt={ex.name}
-                            referrerPolicy="no-referrer"
-                            className={`w-full h-full object-cover transition-all duration-700 ${ex.completed ? 'grayscale opacity-20' : 'group-hover:scale-110 opacity-70 group-hover:opacity-100'}`}
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=300&auto=format&fit=crop';
-                            }}
-                          />
-                          {ex.muscles && (
-                            <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-[8px] font-black uppercase text-white border border-white/10">
-                              {ex.muscles}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 p-5 flex flex-col justify-center gap-3">
-                          <div className="flex justify-between items-start">
-                            <div className="space-y-2">
-                              <h5 className={`font-headline font-bold text-base leading-tight transition-all ${ex.completed ? 'text-on-surface-variant line-through' : 'text-white'}`}>
-                                {ex.name}
-                              </h5>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div className="flex items-center gap-1.5 bg-surface-container-lowest px-2 py-1 rounded-md border border-white/5">
-                                  <span className={`font-black text-xs ${ex.completed ? 'text-on-surface-variant' : 'text-primary-container'}`}>{ex.sets}</span>
-                                  <span className="text-[8px] text-on-surface-variant font-bold uppercase tracking-widest">Séries</span>
-                                </div>
-                                <div className="flex items-center gap-1.5 bg-surface-container-lowest px-2 py-1 rounded-md border border-white/5">
-                                  <span className={`font-black text-xs ${ex.completed ? 'text-on-surface-variant' : 'text-primary-container'}`}>{ex.reps}</span>
-                                  <span className="text-[8px] text-on-surface-variant font-bold uppercase tracking-widest">Reps</span>
-                                </div>
-                                {ex.caloriesBurned && (
-                                  <div className="flex items-center gap-1.5 bg-primary-container/10 px-2 py-1 rounded-md border border-primary-container/10">
-                                    <span className="material-symbols-outlined text-[10px] text-primary-container">local_fire_department</span>
-                                    <span className={`font-black text-xs ${ex.completed ? 'text-on-surface-variant' : 'text-primary-container'}`}>{ex.caloriesBurned}</span>
-                                    <span className="text-[8px] text-on-surface-variant font-bold uppercase tracking-widest">kcal</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-inner ${
-                              ex.completed ? 'bg-primary-container text-[#131313] shadow-lg shadow-primary-container/30' : 'bg-surface-container-lowest text-on-surface-variant'
-                            }`}>
-                              {ex.completed ? <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span> : <div className="w-4 h-4 rounded-full border-2 border-[#1E1E1E]/30" />}
-                            </div>
-                          </div>
-                          {ex.executionTip && !ex.completed && (
-                             <p className="text-[10px] text-on-surface-variant italic leading-snug border-l-2 border-primary-container/30 pl-2">
-                               {ex.executionTip}
-                             </p>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* Completion Progress Overlay */}
-                      {ex.completed && (
-                        <div className="absolute inset-0 bg-primary-container/5 pointer-events-none"></div>
-                      )}
-                    </motion.div>
+                    <ExerciseCard 
+                      key={ex.id} 
+                      exercise={ex} 
+                      onToggle={() => toggleExercise(ex.id)}
+                      onRequestGifSearch={() => {
+                        setCurrentGifSearchParam({ id: ex.id, name: ex.name });
+                        setIsGifModalOpen(true);
+                      }}
+                    />
                   ))}
                 </div>
               </section>
@@ -724,6 +749,15 @@ export default function Workout() {
           </motion.div>
         )}
       </AnimatePresence>
+      
+      {currentGifSearchParam && (
+        <ExerciseSearchModal 
+          isOpen={isGifModalOpen}
+          onClose={() => setIsGifModalOpen(false)}
+          initialQuery={currentGifSearchParam.name}
+          onSelect={(gifUrl, muscles, calorieEstimate) => saveGifUrlForExercise(gifUrl, muscles, calorieEstimate)}
+        />
+      )}
     </div>
   );
 }

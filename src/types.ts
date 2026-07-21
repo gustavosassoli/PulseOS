@@ -1,4 +1,4 @@
-export type Tab = 'life' | 'agenda' | 'health' | 'finances' | 'settings' | 'diet' | 'workout';
+export type Tab = 'life' | 'agenda' | 'health' | 'finances' | 'diet' | 'workout';
 
 export interface Pillar {
   id: string;
@@ -7,6 +7,23 @@ export interface Pillar {
   color: string;
   progress: number;
   goalLabel: string;
+}
+
+export interface RecurringTemplate {
+  id: string;
+  title: string;
+  time: string; // "HH:mm"
+  category: 'Trabalho' | 'Saúde' | 'Pessoal';
+  icon: string;
+  recurrence: {
+    type: 'daily' | 'weekly' | 'weekdays' | 'weekends';
+    days?: number[]; // [0-6] 0=dom, 1=seg, etc
+  };
+  active: boolean;
+  createdAt: any;
+  updatedAt: any;
+  lastGeneratedDate: string;
+  priority?: 'urgent' | 'important' | 'normal';
 }
 
 export interface AgendaItem {
@@ -20,6 +37,9 @@ export interface AgendaItem {
   location: string;
   completed: boolean;
   icon: string;
+  fromTemplate?: boolean;
+  templateId?: string | null;
+  priority?: 'urgent' | 'important' | 'normal';
 }
 
 export interface Transaction {
@@ -92,6 +112,22 @@ export interface Badge {
   category: 'workout' | 'diet' | 'consistency' | 'finance';
 }
 
+export interface ScoreBreakdown {
+  agenda: { pontos: number; maximo: 30 };
+  treino: { pontos: number; maximo: 20 };
+  dieta: { pontos: number; maximo: 20 };
+  habitos: { pontos: number; maximo: 15 };
+  bemEstar: { pontos: number; maximo: 10 };
+  financas: { pontos: number; maximo: 5 };
+}
+
+export interface ScoreHistory {
+  date: string;
+  total: number;
+  breakdown: ScoreBreakdown;
+  archivedAt: any; // or Timestamp
+}
+
 export interface UserProfile {
   uid: string;
   email: string;
@@ -110,4 +146,52 @@ export interface UserProfile {
   workoutPlan?: WorkoutDay[];
   badges?: Badge[];
   monthlyBudget?: string;
+  lifeScore?: number;
+  scoreDate?: string;
+  scoreBreakdown?: ScoreBreakdown;
+  scoreUpdatedAt?: any; // or Timestamp
+  habits?: any[]; // added if needed for habits tracking in profile
+  moodToday?: string; // or wellbeing
+  onboardingCompleted?: boolean;
+  onboardingCompletedAt?: any;
+  mainGoal?: 'productivity' | 'muscle' | 'weightLoss' | 'wellness' | 'finance' | 'balanced';
+  wakeUpTime?: string;
+  sleepTime?: string;
+  mealsPerDay?: number;
+  workoutsPerWeek?: number;
+  dailyCalorieGoal?: number;
+  lastCheckinDate?: string;
+  currentStreak?: number;
+  longestStreak?: number;
+  streaks?: UserStreaks;
+}
+
+export type PillarType = 'treino' | 'dieta' | 'habitos' | 'agenda' | 'financas' | 'checkin';
+
+export interface PillarStreak {
+  current: number;
+  longest: number;
+  lastCompletedDate: string;
+  restDays?: string[]; // e.g., ["sunday", "saturday"]
+}
+
+export interface UserStreaks {
+  treino: PillarStreak;
+  dieta: PillarStreak;
+  habitos: PillarStreak;
+  agenda: PillarStreak;
+  financas: PillarStreak;
+  checkin: PillarStreak;
+}
+
+export interface DailyCheckin {
+  date: string;
+  completedAt: any;
+  skipped: boolean;
+  energyLevel: number;
+  mood: number;
+  sleepHours: number;
+  sleepQuality: number;
+  intention: string;
+  wellbeingPoints: number;
 }

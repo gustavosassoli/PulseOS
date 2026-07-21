@@ -135,6 +135,23 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "name", "calories"]
+    },
+    "DailyCheckin": {
+      "title": "Check-in Diário",
+      "description": "Registro do bem-estar matinal do usuário",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "skipped": { "type": "boolean" },
+        "energyLevel": { "type": "number" },
+        "mood": { "type": "number" },
+        "sleepHours": { "type": "number" },
+        "sleepQuality": { "type": "number" },
+        "intention": { "type": "string" },
+        "wellbeingPoints": { "type": "number" }
+      },
+      "required": ["date", "skipped", "wellbeingPoints"]
     }
   },
   "firestore": {
@@ -157,6 +174,10 @@
     "/users/{userId}/workoutSessions/{sessionId}": {
       "schema": "WorkoutSession",
       "description": "Sessões de treino do usuário"
+    },
+    "/users/{userId}/checkins/{checkinId}": {
+      "schema": "DailyCheckin",
+      "description": "Check-ins de bem-estar diários do usuário"
     }
   }
 }

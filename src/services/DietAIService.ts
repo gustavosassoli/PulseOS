@@ -1,7 +1,3 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
 export interface DietUserProfile {
   objective: string;
   activityLevel: string;
@@ -31,6 +27,18 @@ export interface GeneratedDiet {
       calories: number;
     }[];
   }[];
+}
+
+async function callGemini(prompt: string, schema?: any) {
+  const res = await fetch("/api/gemini", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, schema })
+  });
+  if (!res.ok) {
+    throw new Error(`Failed: ${res.status}`);
+  }
+  return res.json();
 }
 
 export async function generateDietWithAI(profile: DietUserProfile, customRequest?: string): Promise<GeneratedDiet> {
@@ -63,61 +71,51 @@ Retorne APENAS um JSON válido, sem texto adicional, no seguinte formato:
   ]
 }`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
+  const schema = {
+    type: "OBJECT",
+    properties: {
+      totalCalories: { type: "NUMBER" },
+      macros: {
+        type: "OBJECT",
         properties: {
-          totalCalories: { type: Type.NUMBER },
-          macros: {
-            type: Type.OBJECT,
-            properties: {
-              protein: { type: Type.NUMBER },
-              carbs: { type: Type.NUMBER },
-              fats: { type: Type.NUMBER }
-            },
-            required: ["protein", "carbs", "fats"]
-          },
-          meals: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                name: { type: Type.STRING },
-                time: { type: Type.STRING },
-                calories: { type: Type.NUMBER },
-                protein: { type: Type.NUMBER },
-                carbs: { type: Type.NUMBER },
-                fats: { type: Type.NUMBER },
-                items: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      name: { type: Type.STRING },
-                      quantity: { type: Type.STRING },
-                      calories: { type: Type.NUMBER }
-                    },
-                    required: ["name", "quantity", "calories"]
-                  }
-                }
-              },
-              required: ["id", "name", "time", "calories", "items"]
-            }
-          }
+          protein: { type: "NUMBER" },
+          carbs: { type: "NUMBER" },
+          fats: { type: "NUMBER" }
         },
-        required: ["totalCalories", "macros", "meals"]
+        required: ["protein", "carbs", "fats"]
+      },
+      meals: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            id: { type: "STRING" },
+            name: { type: "STRING" },
+            time: { type: "STRING" },
+            calories: { type: "NUMBER" },
+            protein: { type: "NUMBER" },
+            carbs: { type: "NUMBER" },
+            fats: { type: "NUMBER" },
+            items: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  name: { type: "STRING" },
+                  quantity: { type: "STRING" },
+                  calories: { type: "NUMBER" }
+                },
+                required: ["name", "quantity", "calories"]
+              }
+            }
+          },
+          required: ["id", "name", "time", "calories", "items"]
+        }
       }
-    }
-  });
+    },
+    required: ["totalCalories", "macros", "meals"]
+  };
 
-  if (!response.text) {
-    throw new Error("Failed to generate diet from AI");
-  }
-
-  return JSON.parse(response.text) as GeneratedDiet;
+  const result = await callGemini(prompt, schema);
+  return result as GeneratedDiet;
 }

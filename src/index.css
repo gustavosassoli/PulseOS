@@ -65,6 +65,35 @@
   }
 }
 
+@layer utilities {
+  .safe-pt {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 1rem); /* standard baseline */
+  }
+  .safe-pb {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-pl {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+  .safe-pr {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  .min-touch {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+}
+
 .glass-panel {
   background: rgba(58, 57, 57, 0.6);
   backdrop-filter: blur(20px);

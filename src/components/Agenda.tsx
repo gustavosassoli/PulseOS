@@ -1,26 +1,68 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AgendaItem } from '../types';
-import { subscribeToAgenda, toggleAgendaItem, addAgendaItem, updateAgendaItem, deleteAgendaItem } from '../services/firestore';
+import { AgendaItem, UserProfile, RecurringTemplate } from '../types';
+import { subscribeToAgenda, toggleAgendaItem, addAgendaItem, updateAgendaItem, deleteAgendaItem, subscribeToUserProfile } from '../services/firestore';
 import { suggestProductivityTask } from '../services/aiService';
+import { recalculateAndSave } from '../services/lifeScoreService';
+import { auth, db } from '../firebase';
+import { useLifeScoreStore } from '../stores/useLifeScoreStore';
+import { updateStreak } from '../services/streakService';
+import StreakBadge from './streaks/StreakBadge';
+import { generateTodayInstances, createRecurringTemplate, deleteTemplate, toggleTemplateStatus } from '../services/recurringService';
+import RecurringTasksScreen from '../screens/RecurringTasksScreen';
+import RecurrenceSelector from './agenda/RecurrenceSelector';
+import TaskContextMenu from './agenda/TaskContextMenu';
+import PriorityFilterChips from './agenda/PriorityFilterChips';
+import PrioritySelector from './agenda/PrioritySelector';
+import PriorityTag from './agenda/PriorityTag';
+import OverdueUrgentSection from './agenda/OverdueUrgentSection';
+import { sortAgendaItems } from '../utils/sortAgendaItems';
+import { isOverdueUrgent } from '../utils/getOverdueUrgentTasks';
+import { Repeat } from 'lucide-react';
 
 export default function Agenda() {
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [items, setItems] = useState<AgendaItem[]>([]);
   const [editingItem, setEditingItem] = useState<Partial<AgendaItem> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [showRecurringTasks, setShowRecurringTasks] = useState(false);
   
+  // Filtering
+  const [priorityFilter, setPriorityFilter] = useState('all');
+
+  // Recurrence states for modal
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceType, setRecurrenceType] = useState<'daily'|'weekly'|'weekdays'|'weekends'>('daily');
+  const [recurrenceDays, setRecurrenceDays] = useState<number[]>([1,3,5]);
+  const [selectedPriority, setSelectedPriority] = useState<'urgent'|'important'|'normal'>('normal');
+
+  // Context Menu State
+  const [contextMenuTarget, setContextMenuTarget] = useState<AgendaItem | null>(null);
+  
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+
   const [today, setToday] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
+    if (auth.currentUser) {
+      generateTodayInstances(auth.currentUser.uid).catch(console.error);
+    }
+  }, [today]);
+
+  useEffect(() => {
+    const unsubProfile = subscribeToUserProfile(setUserProfile);
     const interval = setInterval(() => {
       const current = new Date().toISOString().split('T')[0];
       if (current !== today) {
         setToday(current);
       }
     }, 1000 * 60);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      unsubProfile();
+    };
   }, [today]);
 
   useEffect(() => {
@@ -30,12 +72,15 @@ export default function Agenda() {
 
   const handleToggle = async (id: string, completed: boolean) => {
     await toggleAgendaItem(id, !completed);
-  };
-
-  const handleEdit = (item: AgendaItem) => {
-    setEditingItem(item);
-    setIsEditMode(true);
-    setIsModalOpen(true);
+    if (!completed) {
+      useLifeScoreStore.getState().showToast('Tarefa concluída', 'CheckSquare', 0);
+    }
+    if (auth.currentUser) {
+      if (userProfile && !completed) {
+        updateStreak(auth.currentUser.uid, userProfile, 'agenda');
+      }
+      recalculateAndSave(auth.currentUser.uid);
+    }
   };
 
   const handleAddNew = () => {
@@ -48,8 +93,10 @@ export default function Agenda() {
       duration: '1h',
       categoryColor: 'primary-container',
       icon: 'check',
-      date: today
+      date: today,
+      priority: 'normal'
     });
+    setSelectedPriority('normal');
     setIsEditMode(false);
     setIsModalOpen(true);
   };
@@ -72,27 +119,110 @@ export default function Agenda() {
     e.preventDefault();
     if (!editingItem) return;
 
-    if (isEditMode && editingItem.id) {
+    if (editingTemplateId && auth.currentUser) {
+      const { updateTemplate } = await import('../services/recurringService');
+      await updateTemplate(auth.currentUser.uid, editingTemplateId, {
+        title: editingItem.title || '',
+        time: editingItem.time || '09:00',
+        category: (editingItem.category as any) || 'Pessoal',
+        icon: editingItem.icon || 'check',
+        priority: selectedPriority,
+        ...(isRecurring ? {
+          recurrence: {
+            type: recurrenceType,
+            ...(recurrenceType === 'weekly' ? { days: recurrenceDays } : {})
+          }
+        } : {})
+      });
+      useLifeScoreStore.getState().showToast('Template atualizado!', 'Check', 0);
+    } else if (isEditMode && editingItem.id) {
       const { id, ...updates } = editingItem as AgendaItem;
-      await updateAgendaItem(id, updates);
+      await updateAgendaItem(id, { ...updates, priority: selectedPriority });
     } else {
-      await addAgendaItem(editingItem as Omit<AgendaItem, 'id'>);
+      if (isRecurring && auth.currentUser) {
+        // Create recurring template
+        await createRecurringTemplate(auth.currentUser.uid, {
+          title: editingItem.title || '',
+          time: editingItem.time || '09:00',
+          category: (editingItem.category as any) || 'Pessoal',
+          icon: editingItem.icon || 'check',
+          priority: selectedPriority,
+          active: true,
+          recurrence: {
+            type: recurrenceType,
+            ...(recurrenceType === 'weekly' ? { days: recurrenceDays } : {})
+          }
+        });
+        useLifeScoreStore.getState().showToast('Tarefa recorrente criada! ✦', 'Repeat', 0);
+        // And safely generate today
+        generateTodayInstances(auth.currentUser.uid).catch(console.error);
+      } else {
+        await addAgendaItem({ 
+          ...editingItem as Omit<AgendaItem, 'id'>,
+          priority: selectedPriority
+        });
+      }
     }
     
     setIsModalOpen(false);
     setEditingItem(null);
+    setEditingTemplateId(null);
+  };
+
+  const handleEdit = (item: AgendaItem) => {
+    setEditingItem({ ...item });
+    setSelectedPriority(item.priority || 'normal');
+    setIsEditMode(true);
+    setIsModalOpen(true);
+  };
+
+  const handleLongPress = (item: AgendaItem) => {
+    setContextMenuTarget(item);
   };
 
   const completedCount = items.filter(i => i.completed).length;
   const completionPercentage = items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0;
+
+  if (showRecurringTasks) {
+    return (
+      <RecurringTasksScreen 
+        onBack={() => setShowRecurringTasks(false)} 
+        onEditToken={(template) => { 
+          setEditingItem({
+            title: template.title,
+            time: template.time,
+            category: template.category,
+            icon: template.icon
+          });
+          setEditingTemplateId(template.id);
+          setIsRecurring(true);
+          setRecurrenceType(template.recurrence.type);
+          if (template.recurrence.days) setRecurrenceDays(template.recurrence.days);
+          setIsEditMode(true);
+          setIsModalOpen(true);
+          setShowRecurringTasks(false);
+        }}
+        onCreateNew={() => { setShowRecurringTasks(false); handleAddNew(); setIsRecurring(true); setEditingTemplateId(null); }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-10 pb-10">
       {/* Dashboard Header */}
       <section className="mb-10">
         <div className="flex flex-col gap-1">
-          <span className="font-label text-[10px] font-medium tracking-widest uppercase text-on-surface-variant">IMPULSO DIÁRIO</span>
-          <h2 className="text-4xl font-black text-white tracking-tighter italic">MANTENHA O RITMO.</h2>
+          <div className="flex justify-between items-center">
+            <span className="font-label text-[10px] font-medium tracking-widest uppercase text-on-surface-variant">IMPULSO DIÁRIO</span>
+            <button onClick={() => setShowRecurringTasks(true)} className="p-2 hover:bg-surface-container-low rounded-full transition-colors flex items-center gap-2 text-[#B9CBB9] hover:text-primary-container">
+              <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:block">Gerenciar Recorrentes</span>
+              <Repeat className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-4">
+            <h2 className="text-4xl font-black text-white tracking-tighter italic">MANTENHA O RITMO.</h2>
+            <StreakBadge pillar="agenda" current={userProfile?.streaks?.agenda?.current || 0} />
+          </div>
         </div>
         
         {/* Bento Stats Grid */}
@@ -100,7 +230,7 @@ export default function Agenda() {
           <div className="bg-surface-container-low p-6 rounded-xl flex flex-col justify-between h-32 relative overflow-hidden">
             <span className="font-label text-[10px] font-bold uppercase tracking-widest text-primary-container">SEQUÊNCIA ATIVA</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-black text-white">24</span>
+              <span className="text-4xl font-black text-white">{userProfile?.streaks?.agenda?.current || '--'}</span>
               <span className="text-on-surface-variant text-sm font-bold tracking-tight">DIAS</span>
             </div>
             <div className="absolute -right-4 -bottom-4 opacity-10">
@@ -117,88 +247,125 @@ export default function Agenda() {
         </div>
       </section>
 
+      {/* Priority Filter */}
+      <PriorityFilterChips selectedPriority={priorityFilter} onChange={setPriorityFilter} />
+
       {/* Habits Checklist Section */}
       <section className="space-y-4">
-        <div className="flex justify-between items-end mb-6">
+        <div className="flex justify-between items-end mb-6 mt-4">
           <h3 className="font-label text-[12px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">Protocolos Atuais</h3>
           <span className="text-on-surface-variant text-xs">{completedCount} de {items.length} concluídos</span>
         </div>
 
         <div className="space-y-4">
-          {items.map((item) => (
-            <div key={item.id} className="group flex flex-col sm:flex-row items-start sm:items-center bg-surface-container-low p-5 rounded-xl transition-all duration-300 hover:bg-surface-container-high relative">
-              <div className="flex-shrink-0 mr-5 mb-3 sm:mb-0">
-                <motion.button 
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => handleToggle(item.id, item.completed)}
-                  className={`relative overflow-hidden w-10 h-10 rounded-[1rem] flex items-center justify-center transition-all duration-300 cursor-pointer ${
-                    item.completed 
-                      ? "text-[#00210C] shadow-[0_0_20px_rgba(0,255,136,0.2)] border-2 border-transparent" 
-                      : "border-2 border-outline-variant text-transparent hover:border-primary-container hover:text-primary-container"
-                  }`}
-                >
-                  <AnimatePresence>
-                    {item.completed && (
-                      <motion.div
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0, opacity: 0 }}
-                        transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                        className="absolute inset-0 bg-primary-container"
-                      />
-                    )}
-                  </AnimatePresence>
-                  <motion.span 
-                    initial={false}
-                    animate={{ scale: item.completed ? 1 : 0.5, opacity: item.completed ? 1 : 0 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 25, delay: item.completed ? 0.1 : 0 }}
-                    className="material-symbols-outlined text-xl font-bold relative z-10"
-                  >
-                    check
-                  </motion.span>
-                </motion.button>
-              </div>
-              <div className="flex-grow">
-                <h4 className={`text-on-surface font-bold text-lg tracking-tight ${item.completed ? "line-through opacity-40" : ""}`}>
-                  {item.title}
-                </h4>
-                <div className="flex flex-wrap items-center gap-2 mt-1">
-                  <span className="material-symbols-outlined text-[16px] text-primary-container" style={{ fontVariationSettings: "'FILL' 1" }}>
-                    history
-                  </span>
-                  <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mr-2">{item.time}</span>
-                  {item.location && (
-                    <>
-                      <span className="material-symbols-outlined text-[16px] text-on-surface-variant">location_on</span>
-                      <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{item.location}</span>
-                    </>
-                  )}
-                </div>
-              </div>
-              
-              {/* Context menu actions */}
-              <div className="absolute right-4 top-4 sm:relative sm:right-auto sm:top-auto flex gap-2 opacity-100 sm:opacity-20 sm:group-hover:opacity-100 transition-opacity ml-auto">
-                <button 
-                  onClick={() => handleEdit(item)}
-                  className="p-1 hover:text-primary-container hover:bg-surface-container-highest rounded"
-                >
-                  <span className="material-symbols-outlined text-sm">edit</span>
-                </button>
-                <button 
-                  onClick={() => handleDelete(item.id)}
-                  className="p-1 hover:text-error hover:bg-error/10 rounded"
-                >
-                  <span className="material-symbols-outlined text-sm">delete</span>
-                </button>
-              </div>
-            </div>
-          ))}
+          {(() => {
+            let displayItems = priorityFilter === 'all' 
+              ? items 
+              : items.filter(i => (i.priority || 'normal') === priorityFilter);
+            
+            displayItems = sortAgendaItems(displayItems);
+            
+            const overdueItems = displayItems.filter(isOverdueUrgent);
+            const regularItems = displayItems.filter(i => !isOverdueUrgent(i));
+            
+            return (
+              <>
+                <OverdueUrgentSection 
+                  items={overdueItems}
+                  onToggle={handleToggle}
+                  onLongPress={handleLongPress}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                />
 
-          {items.length === 0 && (
-            <div className="text-center py-10 text-on-surface-variant">
-              Nenhum protocolo cadastrado hoje.
-            </div>
-          )}
+                {regularItems.map((item) => (
+                  <div 
+                    key={item.id} 
+                    onContextMenu={(e) => { e.preventDefault(); handleLongPress(item); }}
+                    className={`group flex flex-col sm:flex-row items-start sm:items-center bg-surface-container-low p-5 rounded-xl transition-all duration-300 hover:bg-surface-container-high relative
+                      ${item.priority === 'urgent' && !item.completed ? 'border-l-[3px] border-l-[#FF4D4D]' : ''}
+                      ${item.priority === 'important' && !item.completed ? 'border-l-[3px] border-l-[#FFD166]' : ''}
+                    `}
+                  >
+                    <div className="flex-shrink-0 mr-5 mb-3 sm:mb-0">
+                      <motion.button 
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => handleToggle(item.id, item.completed)}
+                        className={`relative overflow-hidden w-10 h-10 rounded-[1rem] flex items-center justify-center transition-all duration-300 cursor-pointer ${
+                          item.completed 
+                            ? "text-[#00210C] shadow-[0_0_20px_rgba(0,255,136,0.2)] border-2 border-transparent" 
+                            : "border-2 border-outline-variant text-transparent hover:border-primary-container hover:text-primary-container"
+                        }`}
+                      >
+                        <AnimatePresence>
+                          {item.completed && (
+                            <motion.div
+                              initial={{ scale: 0, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              exit={{ scale: 0, opacity: 0 }}
+                              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                              className="absolute inset-0 bg-primary-container"
+                            />
+                          )}
+                        </AnimatePresence>
+                        <motion.span 
+                          initial={false}
+                          animate={{ scale: item.completed ? 1 : 0.5, opacity: item.completed ? 1 : 0 }}
+                          transition={{ type: "spring", stiffness: 300, damping: 25, delay: item.completed ? 0.1 : 0 }}
+                          className="material-symbols-outlined text-xl font-bold relative z-10"
+                        >
+                          check
+                        </motion.span>
+                      </motion.button>
+                    </div>
+                    <div className="flex-grow">
+                      <h4 className={`text-on-surface font-bold text-lg tracking-tight ${item.completed ? "line-through opacity-40" : ""}`}>
+                        {item.title}
+                      </h4>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <PriorityTag priority={item.priority} />
+                        <span className="material-symbols-outlined text-[16px] text-primary-container" style={{ fontVariationSettings: "'FILL' 1" }}>
+                          history
+                        </span>
+                        <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mr-2 flex items-center gap-1">
+                          {item.time}
+                          {item.fromTemplate && <Repeat className="w-3 h-3 text-[#B9CBB9] ml-1" title="Tarefa recorrente" />}
+                        </span>
+                        {item.location && (
+                          <>
+                            <span className="material-symbols-outlined text-[16px] text-on-surface-variant">location_on</span>
+                            <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{item.location}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Context menu actions */}
+                    <div className="absolute right-4 top-4 sm:relative sm:right-auto sm:top-auto flex gap-2 opacity-100 sm:opacity-20 sm:group-hover:opacity-100 transition-opacity ml-auto">
+                      <button 
+                        onClick={() => handleEdit(item)}
+                        className="p-1 hover:text-primary-container hover:bg-surface-container-highest rounded"
+                      >
+                        <span className="material-symbols-outlined text-sm">edit</span>
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(item.id)}
+                        className="p-1 hover:text-error hover:bg-error/10 rounded"
+                      >
+                        <span className="material-symbols-outlined text-sm">delete</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            
+                {displayItems.length === 0 && (
+                  <div className="text-center py-10 text-on-surface-variant">
+                    Nenhum protocolo cadastrado para este dia ou filtro.
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       </section>
 
@@ -268,6 +435,64 @@ export default function Agenda() {
                   </div>
                 </div>
 
+                <div className="pt-2">
+                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2">
+                    Prioridade
+                  </label>
+                  <PrioritySelector 
+                    value={selectedPriority} 
+                    onChange={setSelectedPriority} 
+                  />
+                </div>
+                
+                {!isEditMode && (
+                  <div className="pt-4 border-t border-white/5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-white">Repetir esta tarefa?</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsRecurring(!isRecurring)}
+                        className={`w-12 h-6 rounded-full transition-colors relative ${isRecurring ? 'bg-primary-container' : 'bg-[#2A2A2A]'}`}
+                      >
+                        <motion.div
+                          className="w-5 h-5 rounded-full bg-white absolute top-0.5"
+                          initial={false}
+                          animate={{ left: isRecurring ? 'calc(100% - 22px)' : '2px' }}
+                          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                        />
+                      </button>
+                    </div>
+
+                    <AnimatePresence>
+                      {isRecurring && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden space-y-4"
+                        >
+                          <select 
+                            value={recurrenceType}
+                            onChange={(e) => setRecurrenceType(e.target.value as any)}
+                            className="w-full bg-[#2A2A2A] rounded-xl py-3 px-4 text-white hover:bg-[#353534] transition-colors outline-none cursor-pointer appearance-none font-medium"
+                          >
+                            <option value="daily">Todos os dias</option>
+                            <option value="weekdays">Dias úteis (Seg–Sex)</option>
+                            <option value="weekends">Fim de semana (Sáb–Dom)</option>
+                            <option value="weekly">Dias específicos...</option>
+                          </select>
+
+                          {recurrenceType === 'weekly' && (
+                            <div className="pt-2">
+                              <RecurrenceSelector selectedDays={recurrenceDays} onChange={setRecurrenceDays} />
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
                 <div className="pt-4 flex gap-3">
                   <button 
                     type="button"
@@ -288,6 +513,57 @@ export default function Agenda() {
           </div>
         )}
       </AnimatePresence>
+
+      <TaskContextMenu
+        isOpen={contextMenuTarget !== null}
+        onClose={() => setContextMenuTarget(null)}
+        isRecurring={!!contextMenuTarget?.fromTemplate}
+        onEditToday={() => {
+          if (contextMenuTarget) handleEdit(contextMenuTarget);
+        }}
+        onEditAlways={() => {
+          if (contextMenuTarget && contextMenuTarget.templateId && auth.currentUser) {
+            import('firebase/firestore').then(async ({ doc, getDoc }) => {
+              if(!auth.currentUser) return;
+              const ref = doc(db, `users/${auth.currentUser.uid}/recurringTemplates/${contextMenuTarget.templateId}`);
+              const snap = await getDoc(ref);
+              if (snap.exists()) {
+                const template = { id: snap.id, ...snap.data() } as RecurringTemplate;
+                setEditingItem({
+                  title: template.title,
+                  time: template.time,
+                  category: template.category,
+                  icon: template.icon
+                });
+                setSelectedPriority(template.priority || 'normal');
+                setEditingTemplateId(template.id);
+                setIsRecurring(true);
+                setRecurrenceType(template.recurrence.type);
+                if (template.recurrence.days) setRecurrenceDays(template.recurrence.days);
+                setIsEditMode(true);
+                setIsModalOpen(true);
+              }
+            });
+          }
+        }}
+        onPauseTemplate={async () => {
+          if (contextMenuTarget?.templateId && auth.currentUser) {
+             await toggleTemplateStatus(auth.currentUser.uid, contextMenuTarget.templateId, true);
+             useLifeScoreStore.getState().showToast('Tarefa pausada', 'PauseCircle', 0);
+          }
+        }}
+        onDeleteToday={() => {
+           if (contextMenuTarget) handleDelete(contextMenuTarget.id);
+        }}
+        onDeleteAlways={async () => {
+          if (contextMenuTarget?.templateId && auth.currentUser) {
+             if (window.confirm('Excluir este template? Não será mais gerado.')) {
+               await deleteTemplate(auth.currentUser.uid, contextMenuTarget.templateId);
+               useLifeScoreStore.getState().showToast('Template excluído', 'Trash2', 0);
+             }
+          }
+        }}
+      />
     </div>
   );
 }

@@ -72,6 +72,23 @@ service cloud.firestore {
              (data.exercises.size() == 0 || data.exercises[0] is map);
     }
 
+    function isValidHabit(data) {
+      return data.keys().hasAll(['uid']) &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidScoreHistory(data) {
+      return data.keys().hasAll(['total', 'date']) &&
+             data.date is string;
+    }
+
+    function isValidCheckin(data) {
+      return data.keys().hasAll(['date', 'skipped', 'wellbeingPoints']) &&
+             data.date is string &&
+             data.skipped is bool &&
+             data.wellbeingPoints is number;
+    }
+
     // Rules
     match /users/{userId} {
       allow read: if isOwner(userId);
@@ -104,6 +121,31 @@ service cloud.firestore {
         allow write: if isOwner(userId) && isValidId(sessionId);
         allow create: if isValidWorkoutSession(incoming());
         allow update: if isValidWorkoutSession(incoming()) && incoming().uid == existing().uid;
+      }
+
+      match /habits/{habitId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && isValidId(habitId);
+        allow create: if isValidHabit(incoming());
+        allow update: if isValidHabit(incoming()) && incoming().uid == existing().uid;
+      }
+
+      match /scoreHistory/{historyId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && isValidId(historyId);
+        allow create: if isValidScoreHistory(incoming());
+        allow update: if isValidScoreHistory(incoming());
+      }
+
+      match /checkins/{checkinId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && isValidId(checkinId);
+        allow create: if isValidCheckin(incoming());
+        allow update: if isValidCheckin(incoming());
+      }
+
+      match /recurringTemplates/{templateId} {
+        allow read, write: if isOwner(userId);
       }
     }
   }

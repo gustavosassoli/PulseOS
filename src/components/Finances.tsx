@@ -1,10 +1,24 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { useEffect, useState, useMemo } from 'react';
 import { Transaction } from '../types';
-import { subscribeToTransactions, addTransaction, deleteTransaction, subscribeToUserProfile, updateUserProfile } from '../services/firestore';
+import { 
+  subscribeToTransactions, 
+  addTransaction, 
+  deleteTransaction, 
+  subscribeToUserProfile, 
+  updateUserProfile 
+} from '../services/firestore';
+import { auth } from '../firebase';
+import { useLifeScoreStore } from '../stores/useLifeScoreStore';
+import { recalculateAndSave } from '../services/lifeScoreService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
+import { UserProfile } from '../types';
+import { updateStreak } from '../services/streakService';
+import StreakBadge from './streaks/StreakBadge';
+
 export default function Finances() {
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [monthlyBudget, setMonthlyBudget] = useState('0');
@@ -21,6 +35,7 @@ export default function Finances() {
 
   useEffect(() => {
     const unsubProfile = subscribeToUserProfile((data) => {
+      setUserProfile(data as UserProfile);
       if (data.monthlyBudget) setMonthlyBudget(data.monthlyBudget);
     });
 
@@ -65,6 +80,15 @@ export default function Finances() {
   const handleAddTransaction = async () => {
     if (!newTransaction.name || !newTransaction.amount) return;
     await addTransaction(newTransaction as Omit<Transaction, 'id'>);
+    
+    useLifeScoreStore.getState().showToast('Transação registrada', 'Payments', 0);
+    if (auth.currentUser) {
+      if (userProfile) {
+        updateStreak(auth.currentUser.uid, userProfile, 'financas');
+      }
+      recalculateAndSave(auth.currentUser.uid);
+    }
+    
     setIsAdding(false);
     setNewTransaction({
       name: '',
@@ -83,6 +107,7 @@ export default function Finances() {
   const handleDeleteTransaction = async (id: string) => {
     if (window.confirm('Excluir transação?')) {
       await deleteTransaction(id);
+      if (auth.currentUser) recalculateAndSave(auth.currentUser.uid);
     }
   };
 
@@ -102,6 +127,13 @@ export default function Finances() {
 
   return (
     <div className="space-y-8 pb-10">
+      <div className="flex justify-between items-center px-2">
+        <div className="flex items-center gap-3">
+          <h2 className="text-2xl font-headline font-black text-white uppercase tracking-tight">Finanças</h2>
+          <StreakBadge pillar="financas" current={userProfile?.streaks?.financas?.current || 0} />
+        </div>
+      </div>
+
       {/* Financial Summary Bento Grid */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Total Balance: Main Feature */}

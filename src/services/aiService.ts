@@ -1,7 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { AgendaItem, UserProfile, WorkoutDay } from "../types";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export interface ExerciseSuggestion {
   name: string;
@@ -14,6 +11,18 @@ export interface ExerciseSuggestion {
 export interface WorkoutInsight {
   tip: string;
   exercises: ExerciseSuggestion[];
+}
+
+async function callGemini(prompt: string, schema?: any) {
+  const res = await fetch("/api/gemini", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, schema })
+  });
+  if (!res.ok) {
+    throw new Error(`Failed: ${res.status}`);
+  }
+  return res.json();
 }
 
 export async function suggestWorkoutAdjustment(
@@ -44,36 +53,29 @@ export async function suggestWorkoutAdjustment(
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            tip: { type: Type.STRING },
-            exercises: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  muscles: { type: Type.STRING },
-                  setsReps: { type: Type.STRING },
-                  gifUrl: { type: Type.STRING },
-                  execution: { type: Type.STRING },
-                },
-                required: ["name", "muscles", "setsReps", "gifUrl", "execution"]
-              }
-            }
-          },
-          required: ["tip", "exercises"]
+    const schema = {
+      type: "OBJECT",
+      properties: {
+        tip: { type: "STRING" },
+        exercises: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              name: { type: "STRING" },
+              muscles: { type: "STRING" },
+              setsReps: { type: "STRING" },
+              gifUrl: { type: "STRING" },
+              execution: { type: "STRING" },
+            },
+            required: ["name", "muscles", "setsReps", "gifUrl", "execution"]
+          }
         }
-      }
-    });
+      },
+      required: ["tip", "exercises"]
+    };
 
-    return JSON.parse(response.text.trim());
+    return await callGemini(prompt, schema);
   } catch (error) {
     console.error("Erro ao sugerir ajuste de treino:", error);
     return {
@@ -116,42 +118,35 @@ export async function generateFullWorkoutPlan(
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              day: { type: Type.STRING },
-              title: { type: Type.STRING },
-              exercises: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    name: { type: Type.STRING },
-                    sets: { type: Type.NUMBER },
-                    reps: { type: Type.STRING },
-                    muscles: { type: Type.STRING },
-                    gifUrl: { type: Type.STRING },
-                    executionTip: { type: Type.STRING },
-                    caloriesBurned: { type: Type.NUMBER },
-                  },
-                  required: ["name", "sets", "reps", "muscles", "gifUrl", "executionTip", "caloriesBurned"]
-                }
-              }
-            },
-            required: ["day", "title", "exercises"]
+    const schema = {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          day: { type: "STRING" },
+          title: { type: "STRING" },
+          exercises: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                name: { type: "STRING" },
+                sets: { type: "NUMBER" },
+                reps: { type: "STRING" },
+                muscles: { type: "STRING" },
+                gifUrl: { type: "STRING" },
+                executionTip: { type: "STRING" },
+                caloriesBurned: { type: "NUMBER" },
+              },
+              required: ["name", "sets", "reps", "muscles", "gifUrl", "executionTip", "caloriesBurned"]
+            }
           }
-        }
+        },
+        required: ["day", "title", "exercises"]
       }
-    });
+    };
 
-    const plan: WorkoutDay[] = JSON.parse(response.text.trim());
+    const plan: WorkoutDay[] = await callGemini(prompt, schema);
     
     const dayOrder = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
     
@@ -203,27 +198,20 @@ export async function suggestProductivityTask(currentAgenda: AgendaItem[]): Prom
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            category: { type: Type.STRING },
-            time: { type: Type.STRING },
-            location: { type: Type.STRING },
-            duration: { type: Type.STRING },
-            icon: { type: Type.STRING },
-          },
-          required: ["title", "category", "time", "location", "duration", "icon"],
-        },
+    const schema = {
+      type: "OBJECT",
+      properties: {
+        title: { type: "STRING" },
+        category: { type: "STRING" },
+        time: { type: "STRING" },
+        location: { type: "STRING" },
+        duration: { type: "STRING" },
+        icon: { type: "STRING" },
       },
-    });
+      required: ["title", "category", "time", "location", "duration", "icon"],
+    };
 
-    const result = JSON.parse(response.text);
+    const result = await callGemini(prompt, schema);
     return {
       ...result,
       completed: false,

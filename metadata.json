@@ -1,5 +1,6 @@
 {
   "name": "PulseOS - Gestão de Vida 1",
   "description": "Um sistema operacional pessoal para gerenciar produtividade, saúde e finanças com foco em equilíbrio e momentum.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

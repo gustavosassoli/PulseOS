@@ -1,7 +1,13 @@
 import { Pillar, AgendaItem, Tab } from '../types';
 import { motion } from 'motion/react';
 import { useEffect, useState } from 'react';
-import { subscribeToAgenda, subscribeToTransactions, subscribeToMeals } from '../services/firestore';
+import { subscribeToAgenda, subscribeToTransactions, subscribeToMeals, subscribeToUserProfile } from '../services/firestore';
+import LifeScoreRing from './LifeScoreRing';
+import StreakScroll from './streaks/StreakScroll';
+import ScoreBreakdown from './ScoreBreakdown';
+import { useTodayCheckin } from '../hooks/useTodayCheckin';
+import { Quote } from 'lucide-react';
+import { UserProfile } from '../types';
 
 const IconMap: Record<string, string> = {
   wallet: 'wallet',
@@ -17,15 +23,19 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
   const [agenda, setAgenda] = useState<AgendaItem[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [meals, setMeals] = useState<any[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const { checkin } = useTodayCheckin();
 
   useEffect(() => {
     const unsubAgenda = subscribeToAgenda(setAgenda);
     const unsubTransactions = subscribeToTransactions(setTransactions);
     const unsubMeals = subscribeToMeals(setMeals);
+    const unsubProfile = subscribeToUserProfile(setUserProfile);
     return () => {
       unsubAgenda();
       unsubTransactions();
       unsubMeals();
+      unsubProfile();
     };
   }, []);
 
@@ -41,48 +51,59 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
     { id: 'diet', name: 'Nutrição', icon: 'apple', color: 'primary-container', progress: nutritionProgress, goalLabel: `${Math.round(nutritionProgress)}%` },
   ];
 
-  const lifeScore = Math.round(pillars.reduce((acc, curr) => acc + curr.progress, 0) / pillars.length);
-
   return (
     <div className="space-y-10 pb-10">
-      {/* Life Score Central Hero */}
-      <section className="relative overflow-hidden">
-        <div className="bg-surface-container-low rounded-xl p-8 flex flex-col items-center justify-center relative overflow-hidden">
-          <div className="absolute -top-24 -right-24 w-64 h-64 bg-primary-container/10 rounded-full blur-[80px]"></div>
-          <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-primary-container/10 rounded-full blur-[80px]"></div>
-          
-          <div className="relative w-56 h-56 flex items-center justify-center">
-            <svg className="absolute inset-0 w-full h-full -rotate-90">
-              <circle className="text-surface-container-highest" cx="112" cy="112" fill="transparent" r="100" stroke="currentColor" strokeWidth="12"></circle>
-              <motion.circle 
-                initial={{ strokeDashoffset: 628 }}
-                animate={{ strokeDashoffset: 628 - (628 * lifeScore) / 100 }}
-                transition={{ duration: 1.5, ease: "easeOut" }}
-                className="text-primary-container drop-shadow-[0_0_15px_rgba(0,255,136,0.3)]" 
-                cx="112" cy="112" fill="transparent" r="100" stroke="currentColor" strokeDasharray="628" strokeLinecap="round" strokeWidth="12"
-              ></motion.circle>
-            </svg>
-            <div className="flex flex-col items-center">
-              <span className="text-6xl font-black text-white font-headline tracking-tighter">{lifeScore}</span>
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant mt-1">Life Score</span>
-            </div>
-          </div>
+      {checkin && checkin.intention && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-[#1C1B1B] border border-transparent border-l-3 border-l-[#00FF88] rounded-r-xl p-4 flex gap-3 max-w-sm"
+        >
+          <Quote className="w-5 h-5 text-[#00FF88] shrink-0 mt-0.5" />
+          <p className="text-white text-sm font-medium italic">"{checkin.intention}"</p>
+        </motion.div>
+      )}
 
-          <div className="mt-8 text-center">
-            <h2 className="text-2xl font-black tracking-tighter text-white italic">MANTENHA O MOMENTUM.</h2>
-            <p className="text-on-surface-variant mt-2 text-sm max-w-[240px]">
-              {lifeScore > 50 ? 'Seu desempenho está excelente!' : 'Continue focado nos seus pilares.'}
-            </p>
+      <LifeScoreRing />
+      
+      <ScoreBreakdown />
+      
+      <StreakScroll userProfile={userProfile} />
+
+      {/* Agenda Summary */}
+      <section>
+        <div className="flex justify-between items-end mb-4 sm:mb-6">
+          <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant">Agenda de Hoje</h3>
+          
+          <div className="flex gap-2 items-center">
+            {agenda.filter(i => (i.priority === 'urgent') && !i.completed).length > 0 && (
+              <div className="flex items-center gap-1 bg-[#FF4D4D]/10 rounded-full px-2 py-0.5 border border-[#FF4D4D]/30">
+                <span className="text-[8px]">🔴</span>
+                <span className="text-[#FF4D4D] text-[11px] font-bold">{agenda.filter(i => (i.priority === 'urgent') && !i.completed).length}</span>
+              </div>
+            )}
+            {agenda.filter(i => (i.priority === 'important') && !i.completed).length > 0 && (
+              <div className="flex items-center gap-1 bg-[#FFD166]/10 rounded-full px-2 py-0.5 border border-[#FFD166]/30">
+                <span className="text-[8px]">🟡</span>
+                <span className="text-[#FFD166] text-[11px] font-bold">{agenda.filter(i => (i.priority === 'important') && !i.completed).length}</span>
+              </div>
+            )}
+            {agenda.filter(i => (!i.priority || i.priority === 'normal') && !i.completed).length > 0 && (
+              <div className="flex items-center gap-1 bg-[#00FF88]/10 rounded-full px-2 py-0.5 border border-[#00FF88]/30">
+                <span className="text-[8px]">🟢</span>
+                <span className="text-[#00FF88] text-[11px] font-bold">{agenda.filter(i => (!i.priority || i.priority === 'normal') && !i.completed).length}</span>
+              </div>
+            )}
           </div>
         </div>
       </section>
 
       {/* Pillars Bento Grid */}
       <section>
-        <div className="flex justify-between items-end mb-6">
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">Visão Geral</h3>
+        <div className="flex justify-between items-end mb-4 sm:mb-6">
+          <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant">Visão Geral</h3>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           {pillars.map((pillar) => {
             const iconName = IconMap[pillar.icon];
             return (
