@@ -42,7 +42,7 @@ export default function OnboardingStep2({ userName, selectedGoal, onSelectGoal }
               onClick={() => onSelectGoal(option.id)}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
-              animate={isSelected ? { scale: [0.97, 1.02, 1] } : { scale: 1 }}
+              animate={{ scale: isSelected ? 1.02 : 1 }}
               transition={{ type: 'spring', stiffness: 300, damping: 20 }}
               className={`flex flex-col items-center justify-center p-5 rounded-2xl cursor-pointer transition-all border outline-none text-center ${
                 isSelected

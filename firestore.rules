@@ -133,15 +133,15 @@ service cloud.firestore {
       match /scoreHistory/{historyId} {
         allow read: if isOwner(userId);
         allow write: if isOwner(userId) && isValidId(historyId);
-        allow create: if isValidScoreHistory(incoming());
-        allow update: if isValidScoreHistory(incoming());
+        allow create: if isOwner(userId) && isValidId(historyId) && isValidScoreHistory(incoming());
+        allow update: if isOwner(userId) && isValidId(historyId) && isValidScoreHistory(incoming());
       }
 
       match /checkins/{checkinId} {
         allow read: if isOwner(userId);
         allow write: if isOwner(userId) && isValidId(checkinId);
-        allow create: if isValidCheckin(incoming());
-        allow update: if isValidCheckin(incoming());
+        allow create: if isOwner(userId) && isValidId(checkinId) && isValidCheckin(incoming());
+        allow update: if isOwner(userId) && isValidId(checkinId) && isValidCheckin(incoming());
       }
 
       match /recurringTemplates/{templateId} {
