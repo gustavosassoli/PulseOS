@@ -36,7 +36,8 @@ async function callGemini(prompt: string, schema?: any) {
     body: JSON.stringify({ prompt, schema })
   });
   if (!res.ok) {
-    throw new Error(`Failed: ${res.status}`);
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || `Falha na requisição: ${res.status}`);
   }
   return res.json();
 }
