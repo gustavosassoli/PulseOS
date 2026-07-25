@@ -2,7 +2,7 @@
   "entities": {
     "UserProfile": {
       "title": "Perfil do Usuário",
-      "description": "Dados privados do usuário",
+      "description": "Dados privados do perfil do usuário e configurações",
       "type": "object",
       "properties": {
         "uid": { "type": "string" },
@@ -16,21 +16,86 @@
         "trainingFocus": { "type": "string", "enum": ["lose", "gain"] },
         "gender": { "type": "string", "enum": ["male", "female"] },
         "monthlyBudget": { "type": "string" },
-        "weightHistory": { 
+        "onboardingCompleted": { "type": "boolean" },
+        "onboardingCompletedAt": { "type": "string", "format": "date-time" },
+        "mainGoal": {
+          "type": "string",
+          "enum": ["productivity", "muscle", "weightLoss", "wellness", "finance", "balanced"]
+        },
+        "wakeUpTime": { "type": "string" },
+        "sleepTime": { "type": "string" },
+        "mealsPerDay": { "type": "number" },
+        "workoutsPerWeek": { "type": "number" },
+        "dailyCalorieGoal": { "type": "number" },
+        "height": { "type": "number" },
+        "scoreBreakdown": { "type": "object" },
+        "scoreDate": { "type": "string" },
+        "lastCheckinDate": { "type": "string" },
+        "currentStreak": { "type": "number" },
+        "longestStreak": { "type": "number" },
+        "streaks": {
+          "type": "object",
+          "properties": {
+            "treino": { "$ref": "#/entities/StreakItem" },
+            "dieta": { "$ref": "#/entities/StreakItem" },
+            "habitos": { "$ref": "#/entities/StreakItem" },
+            "agenda": { "$ref": "#/entities/StreakItem" },
+            "financas": { "$ref": "#/entities/StreakItem" },
+            "checkin": { "$ref": "#/entities/StreakItem" }
+          }
+        },
+        "pomodoroSettings": {
+          "type": "object",
+          "properties": {
+            "focusMinutes": { "type": "number" },
+            "shortBreakMinutes": { "type": "number" },
+            "longBreakMinutes": { "type": "number" },
+            "cyclesUntilLongBreak": { "type": "number" },
+            "soundEnabled": { "type": "boolean" }
+          }
+        },
+        "restTimerSettings": {
+          "type": "object",
+          "properties": {
+            "defaultSeconds": { "type": "number" },
+            "autoStart": { "type": "boolean" },
+            "soundEnabled": { "type": "boolean" },
+            "vibrationEnabled": { "type": "boolean" }
+          }
+        },
+        "aiDietGenerated": { "type": "boolean" },
+        "calorieGoalStreak": { "type": "number" },
+        "workoutXUsage": {
+          "type": "object",
+          "properties": {
+            "count": { "type": "number" },
+            "month": { "type": "string" }
+          }
+        },
+        "weightHistory": {
           "type": "array",
           "items": { "$ref": "#/entities/WeightHistory" }
         },
-        "workoutPlan": { 
+        "workoutPlan": {
           "type": "array",
           "items": { "$ref": "#/entities/WorkoutDay" }
         },
-        "badges": { 
+        "badges": {
           "type": "array",
           "items": { "$ref": "#/entities/Badge" }
         },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email"]
+    },
+    "StreakItem": {
+      "title": "Item de Sequência (Streak)",
+      "type": "object",
+      "properties": {
+        "current": { "type": "number" },
+        "longest": { "type": "number" },
+        "lastCompletedDate": { "type": "string" }
+      }
     },
     "WeightHistory": {
       "title": "Histórico de Peso",
@@ -39,49 +104,6 @@
         "date": { "type": "string" },
         "weight": { "type": "number" }
       }
-    },
-    "WorkoutDay": {
-      "title": "Plano de Treino Diário",
-      "type": "object",
-      "properties": {
-        "day": { "type": "string" },
-        "title": { "type": "string" },
-        "exercises": { 
-          "type": "array",
-          "items": { "$ref": "#/entities/WorkoutExercise" }
-        }
-      }
-    },
-    "WorkoutExercise": {
-      "title": "Exercício de Treino",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "sets": { "type": "number" },
-        "reps": { "type": "string" },
-        "completed": { "type": "boolean" },
-        "muscles": { "type": "string" },
-        "gifUrl": { "type": "string" }
-      }
-    },
-    "WorkoutSession": {
-      "title": "Sessão de Treino",
-      "description": "Registro de um treino realizado",
-      "type": "object",
-      "properties": {
-        "uid": { "type": "string" },
-        "date": { "type": "string" },
-        "dayName": { "type": "string" },
-        "title": { "type": "string" },
-        "exercises": { 
-          "type": "array",
-          "items": { "$ref": "#/entities/WorkoutExercise" }
-        },
-        "completed": { "type": "boolean" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["uid", "date", "title", "exercises"]
     },
     "Badge": {
       "title": "Conquista",
@@ -97,50 +119,288 @@
     },
     "AgendaItem": {
       "title": "Item da Agenda",
-      "description": "Tarefa ou evento agendado",
+      "description": "Tarefa ou evento agendado na rotina do usuário",
       "type": "object",
       "properties": {
+        "id": { "type": "string" },
         "uid": { "type": "string" },
         "title": { "type": "string" },
         "category": { "type": "string", "enum": ["Trabalho", "Saúde", "Pessoal"] },
         "time": { "type": "string" },
+        "date": { "type": "string" },
+        "priority": { "type": "string", "enum": ["urgent", "important", "normal"] },
+        "durationMinutes": { "type": "number" },
+        "fromTemplate": { "type": "boolean" },
+        "templateId": { "type": "string" },
         "completed": { "type": "boolean" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "recurring": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "title", "category", "time"]
     },
-    "Transaction": {
-      "title": "Transação Financeira",
-      "description": "Entrada ou saída de dinheiro",
+    "RecurringTemplate": {
+      "title": "Modelo Recorrente de Agenda",
+      "description": "Template para geração automática de hábitos ou tarefas recorrentes",
       "type": "object",
       "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "time": { "type": "string" },
+        "category": { "type": "string" },
+        "icon": { "type": "string" },
+        "priority": { "type": "string", "enum": ["urgent", "important", "normal"] },
+        "durationMinutes": { "type": "number" },
+        "recurrence": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "enum": ["daily", "weekly", "weekdays", "weekends"] },
+            "days": { "type": "array", "items": { "type": "number" } }
+          }
+        },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "lastGeneratedDate": { "type": "string" },
+        "templateId": { "type": "string" }
+      }
+    },
+    "FocusSession": {
+      "title": "Sessão de Foco (Pomodoro)",
+      "description": "Registro de sessão de foco associada a uma tarefa da agenda",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "agendaItemId": { "type": "string" },
+        "taskTitle": { "type": "string" },
+        "date": { "type": "string" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "pomodorosCompleted": { "type": "number" },
+        "totalFocusMinutes": { "type": "number" },
+        "wasInterrupted": { "type": "boolean" }
+      }
+    },
+    "WorkoutSession": {
+      "title": "Sessão de Treino",
+      "description": "Registro de um treino executado",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "date": { "type": "string" },
+        "dayName": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string" },
+        "duration": { "type": "number" },
+        "intensity": { "type": "string", "enum": ["light", "moderate", "intense"] },
+        "fromPlan": { "type": "boolean" },
+        "planDayId": { "type": "number" },
+        "totalRestSeconds": { "type": "number" },
+        "completedSetsCount": { "type": "number" },
+        "focusPercentage": { "type": "number" },
+        "exercises": {
+          "type": "array",
+          "items": { "$ref": "#/entities/WorkoutExercise" }
+        },
+        "completed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "date", "title", "exercises"]
+    },
+    "WorkoutExercise": {
+      "title": "Exercício de Treino",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "sets": { "type": "number" },
+        "reps": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "completedSets": { "type": "number" },
+        "restSeconds": { "type": "number" },
+        "order": { "type": "number" },
+        "muscles": { "type": "string" },
+        "gifUrl": { "type": "string" }
+      }
+    },
+    "WorkoutPlan": {
+      "title": "Plano de Treino Semanal",
+      "description": "Estrutura do plano de treinos gerado por IA ou customizado",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "active": { "type": "boolean" },
+        "generatedByAI": { "type": "boolean" },
+        "goal": { "type": "string" },
+        "days": {
+          "type": "array",
+          "items": { "$ref": "#/entities/WorkoutDay" }
+        }
+      }
+    },
+    "WorkoutDay": {
+      "title": "Dia de Treino",
+      "type": "object",
+      "properties": {
+        "day": { "type": "string" },
+        "dayOfWeek": { "type": "number" },
+        "dayName": { "type": "string" },
+        "title": { "type": "string" },
+        "isRestDay": { "type": "boolean" },
+        "muscleGroups": { "type": "array", "items": { "type": "string" } },
+        "workoutType": { "type": "string" },
+        "estimatedDuration": { "type": "number" },
+        "exercises": {
+          "type": "array",
+          "items": { "$ref": "#/entities/PlannedExercise" }
+        }
+      }
+    },
+    "PlannedExercise": {
+      "title": "Exercício Planejado",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "sets": { "type": "number" },
+        "reps": { "type": "string" },
+        "muscles": { "type": "string" },
+        "gifUrl": { "type": "string" },
+        "order": { "type": "number" }
+      }
+    },
+    "Meal": {
+      "title": "Refeição do Usuário",
+      "description": "Registro de alimento ingerido",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["Café da Manhã", "Almoço", "Jantar", "Lanche"] },
+        "calories": { "type": "number" },
+        "date": { "type": "string" },
+        "mealTime": { "type": "string" },
+        "macros": {
+          "type": "object",
+          "properties": {
+            "protein": { "type": "number" },
+            "carbs": { "type": "number" },
+            "fat": { "type": "number" }
+          }
+        },
+        "isFromDietPlan": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "calories"]
+    },
+    "DietBase": {
+      "title": "Base da Dieta Recomendada",
+      "description": "Plano de dieta base do usuário com refeições e metas de macros",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "generatedByAI": { "type": "boolean" },
+        "profile": {
+          "type": "object",
+          "properties": {
+            "objetivo": { "type": "string" },
+            "metaCalorica": { "type": "number" },
+            "totalRefeicoes": { "type": "number" },
+            "restricoes": { "type": "string" }
+          }
+        },
+        "macros": {
+          "type": "object",
+          "properties": {
+            "proteina": { "type": "number" },
+            "carboidrato": { "type": "number" },
+            "gordura": { "type": "number" }
+          }
+        },
+        "refeicoes": {
+          "type": "array",
+          "items": { "$ref": "#/entities/DietMeal" }
+        }
+      }
+    },
+    "DietMeal": {
+      "title": "Refeição do Plano de Dieta Base",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "horario": { "type": "string" },
+        "calorias": { "type": "number" },
+        "alimentos": {
+          "type": "array",
+          "items": { "$ref": "#/entities/DietFoodItem" }
+        },
+        "isBaseItem": { "type": "boolean" }
+      }
+    },
+    "DietFoodItem": {
+      "title": "Item Alimentar",
+      "type": "object",
+      "properties": {
+        "nome": { "type": "string" },
+        "quantidade": { "type": "string" },
+        "calorias": { "type": "number" }
+      }
+    },
+    "DietDayProgress": {
+      "title": "Progresso Diário de Dieta",
+      "description": "Status diário de conclusão das refeições do plano",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "refeicoesConcluidas": { "type": "array", "items": { "type": "string" } },
+        "caloriasConsumidas": { "type": "number" },
+        "macrosConsumidos": { "type": "object" },
+        "extrasDoDia": {
+          "type": "array",
+          "items": { "$ref": "#/entities/DietExtraItem" }
+        }
+      }
+    },
+    "DietExtraItem": {
+      "title": "Item Extra Consumido",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "calorias": { "type": "number" }
+      }
+    },
+    "Transaction": {
+      "title": "Transação Financeira",
+      "description": "Entrada ou saída financeira registrada",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
         "uid": { "type": "string" },
         "name": { "type": "string" },
         "category": { "type": "string" },
         "amount": { "type": "number" },
         "type": { "type": "string", "enum": ["debit", "credit"] },
+        "date": { "type": "string" },
+        "notes": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "name", "amount", "type"]
     },
-    "Meal": {
-      "title": "Refeição",
-      "description": "Registro de alimentação",
-      "type": "object",
-      "properties": {
-        "uid": { "type": "string" },
-        "name": { "type": "string" },
-        "type": { "type": "string", "enum": ["Café da Manhã", "Almoço", "Jantar", "Lanche"] },
-        "calories": { "type": "number" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["uid", "name", "calories"]
-    },
     "DailyCheckin": {
-      "title": "Check-in Diário",
-      "description": "Registro do bem-estar matinal do usuário",
+      "title": "Check-in Diário de Bem-estar",
+      "description": "Registro diário de humor, sono, energia e intenção do usuário",
       "type": "object",
       "properties": {
+        "id": { "type": "string" },
         "date": { "type": "string" },
         "completedAt": { "type": "string", "format": "date-time" },
         "skipped": { "type": "boolean" },
@@ -152,12 +412,77 @@
         "wellbeingPoints": { "type": "number" }
       },
       "required": ["date", "skipped", "wellbeingPoints"]
+    },
+    "WeeklyChallenge": {
+      "title": "Desafios Semanal de Gamificação",
+      "description": "Conjunto de metas e desafios propostos semanalmente",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "weekStart": { "type": "string" },
+        "weekEnd": { "type": "string" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "generatedByAI": { "type": "boolean" },
+        "challenges": {
+          "type": "array",
+          "items": { "$ref": "#/entities/Challenge" }
+        },
+        "completed": { "type": "boolean" },
+        "bonusPoints": { "type": "number" },
+        "weekMessage": { "type": "string" }
+      }
+    },
+    "Challenge": {
+      "title": "Desafio Individual",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "targetValue": { "type": "number" },
+        "currentValue": { "type": "number" },
+        "unit": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "completedAt": { "type": "string" },
+        "difficulty": { "type": "string", "enum": ["easy", "medium", "hard"] },
+        "bonusPoints": { "type": "number" }
+      }
+    },
+    "Habit": {
+      "title": "Hábito",
+      "description": "Registro de hábitos com tracking de frequência e sequência",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "category": { "type": "string" },
+        "frequency": { "type": "string", "enum": ["daily", "weekly"] },
+        "active": { "type": "boolean" },
+        "currentStreak": { "type": "number" },
+        "longestStreak": { "type": "number" },
+        "lastCompleted": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ScoreHistory": {
+      "title": "Histórico do Pulse Score",
+      "description": "Registro histórico arquivado do LifeScore em uma data",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "total": { "type": "number" },
+        "breakdown": { "type": "object" },
+        "archivedAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "UserProfile",
-      "description": "Documento do perfil do usuário"
+      "description": "Perfil e configurações privadas do usuário"
     },
     "/users/{userId}/agenda/{itemId}": {
       "schema": "AgendaItem",
@@ -169,15 +494,47 @@
     },
     "/users/{userId}/meals/{mealId}": {
       "schema": "Meal",
-      "description": "Refeições do usuário"
+      "description": "Refeições e diário de calorias do usuário"
     },
     "/users/{userId}/workoutSessions/{sessionId}": {
       "schema": "WorkoutSession",
-      "description": "Sessões de treino do usuário"
+      "description": "Sessões e treinos concluídos"
     },
-    "/users/{userId}/checkins/{checkinId}": {
+    "/users/{userId}/habits/{habitId}": {
+      "schema": "Habit",
+      "description": "Hábitos do usuário"
+    },
+    "/users/{userId}/checkins/{date}": {
       "schema": "DailyCheckin",
       "description": "Check-ins de bem-estar diários do usuário"
+    },
+    "/users/{userId}/recurringTemplates/{templateId}": {
+      "schema": "RecurringTemplate",
+      "description": "Modelos recorrentes da agenda"
+    },
+    "/users/{userId}/challenges/{weekId}": {
+      "schema": "WeeklyChallenge",
+      "description": "Desafios semanais de gamificação"
+    },
+    "/users/{userId}/focusSessions/{sessionId}": {
+      "schema": "FocusSession",
+      "description": "Sessões de foco Pomodoro executadas"
+    },
+    "/users/{userId}/workoutPlan/{planId}": {
+      "schema": "WorkoutPlan",
+      "description": "Planos de treino do usuário"
+    },
+    "/users/{userId}/scoreHistory/{date}": {
+      "schema": "ScoreHistory",
+      "description": "Histórico arquivado do LifeScore"
+    },
+    "/users/{userId}/dietBase/{dietId}": {
+      "schema": "DietBase",
+      "description": "Plano de dieta base do usuário"
+    },
+    "/users/{userId}/dietProgress/{date}": {
+      "schema": "DietDayProgress",
+      "description": "Progresso diário no plano de dieta"
     }
   }
 }

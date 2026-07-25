@@ -43,7 +43,6 @@ service cloud.firestore {
       return data.keys().hasAll(['uid', 'title', 'category', 'time']) &&
              data.uid == request.auth.uid &&
              data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
-             data.category in ['Trabalho', 'Saúde', 'Pessoal'] &&
              data.time is string && data.time.size() <= 10;
     }
 
@@ -59,8 +58,7 @@ service cloud.firestore {
       return data.keys().hasAll(['uid', 'name', 'calories']) &&
              data.uid == request.auth.uid &&
              data.name is string && data.name.size() <= 200 &&
-             data.calories is number &&
-             (data.get('weight', 100) is number);
+             data.calories is number;
     }
 
     function isValidWorkoutSession(data) {
@@ -68,13 +66,12 @@ service cloud.firestore {
              data.uid == request.auth.uid &&
              data.date is string && data.date.size() <= 50 &&
              data.title is string && data.title.size() <= 200 &&
-             data.exercises is list && data.exercises.size() <= 50 &&
-             (data.exercises.size() == 0 || data.exercises[0] is map);
+             data.exercises is list;
     }
 
     function isValidHabit(data) {
-      return data.keys().hasAll(['uid']) &&
-             data.uid == request.auth.uid;
+      return data.keys().hasAll(['name']) &&
+             data.name is string;
     }
 
     function isValidScoreHistory(data) {
@@ -96,55 +93,54 @@ service cloud.firestore {
       allow update: if isOwner(userId) && isValidUserProfile(incoming()) && isUserProfileImmutable(incoming(), existing());
 
       match /agenda/{itemId} {
-        allow read: if isOwner(userId);
-        allow write: if isOwner(userId) && isValidId(itemId);
-        allow create: if isValidAgenda(incoming());
-        allow update: if isValidAgenda(incoming()) && incoming().uid == existing().uid;
+        allow read, write: if isOwner(userId);
       }
 
       match /transactions/{transactionId} {
-        allow read: if isOwner(userId);
-        allow write: if isOwner(userId) && isValidId(transactionId);
-        allow create: if isValidTransaction(incoming());
-        allow update: if isValidTransaction(incoming()) && incoming().uid == existing().uid;
+        allow read, write: if isOwner(userId);
       }
 
       match /meals/{mealId} {
-        allow read: if isOwner(userId);
-        allow write: if isOwner(userId) && isValidId(mealId);
-        allow create: if isValidMeal(incoming());
-        allow update: if isValidMeal(incoming()) && incoming().uid == existing().uid;
+        allow read, write: if isOwner(userId);
       }
 
       match /workoutSessions/{sessionId} {
-        allow read: if isOwner(userId);
-        allow write: if isOwner(userId) && isValidId(sessionId);
-        allow create: if isValidWorkoutSession(incoming());
-        allow update: if isValidWorkoutSession(incoming()) && incoming().uid == existing().uid;
+        allow read, write: if isOwner(userId);
       }
 
       match /habits/{habitId} {
-        allow read: if isOwner(userId);
-        allow write: if isOwner(userId) && isValidId(habitId);
-        allow create: if isValidHabit(incoming());
-        allow update: if isValidHabit(incoming()) && incoming().uid == existing().uid;
+        allow read, write: if isOwner(userId);
       }
 
       match /scoreHistory/{historyId} {
-        allow read: if isOwner(userId);
-        allow write: if isOwner(userId) && isValidId(historyId);
-        allow create: if isOwner(userId) && isValidId(historyId) && isValidScoreHistory(incoming());
-        allow update: if isOwner(userId) && isValidId(historyId) && isValidScoreHistory(incoming());
+        allow read, write: if isOwner(userId);
       }
 
       match /checkins/{checkinId} {
-        allow read: if isOwner(userId);
-        allow write: if isOwner(userId) && isValidId(checkinId);
-        allow create: if isOwner(userId) && isValidId(checkinId) && isValidCheckin(incoming());
-        allow update: if isOwner(userId) && isValidId(checkinId) && isValidCheckin(incoming());
+        allow read, write: if isOwner(userId);
       }
 
       match /recurringTemplates/{templateId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /challenges/{weekId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /focusSessions/{sessionId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /workoutPlan/{planId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /dietBase/{dietId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /dietProgress/{date} {
         allow read, write: if isOwner(userId);
       }
 
