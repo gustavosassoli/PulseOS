@@ -18,9 +18,11 @@ import PriorityTag from './agenda/PriorityTag';
 import OverdueUrgentSection from './agenda/OverdueUrgentSection';
 import { sortAgendaItems } from '../utils/sortAgendaItems';
 import { isOverdueUrgent } from '../utils/getOverdueUrgentTasks';
-import { Repeat } from 'lucide-react';
+import { Repeat, Droplets, CheckSquare } from 'lucide-react';
+import HydrationAlerts from './agenda/HydrationAlerts';
 
 export default function Agenda() {
+  const [subTab, setSubTab] = useState<'protocols' | 'hydration'>('protocols');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [items, setItems] = useState<AgendaItem[]>([]);
   const [editingItem, setEditingItem] = useState<Partial<AgendaItem> | null>(null);
@@ -247,135 +249,167 @@ export default function Agenda() {
         </div>
       </section>
 
-      {/* Priority Filter */}
-      <PriorityFilterChips selectedPriority={priorityFilter} onChange={setPriorityFilter} />
+      {/* Sub-tab Navigation */}
+      <div className="flex p-1 bg-surface-container-low rounded-xl border border-white/5 my-6">
+        <button
+          onClick={() => setSubTab('protocols')}
+          className={`flex-1 py-2.5 px-4 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            subTab === 'protocols'
+              ? 'bg-primary-container text-[#00210C] shadow-sm'
+              : 'text-on-surface-variant hover:text-white'
+          }`}
+        >
+          <CheckSquare className="w-4 h-4" />
+          Protocolos & Hábitos
+        </button>
+        <button
+          onClick={() => setSubTab('hydration')}
+          className={`flex-1 py-2.5 px-4 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            subTab === 'hydration'
+              ? 'bg-primary-container text-[#00210C] shadow-sm'
+              : 'text-on-surface-variant hover:text-white'
+          }`}
+        >
+          <Droplets className="w-4 h-4" />
+          Alertas de Hidratação
+        </button>
+      </div>
 
-      {/* Habits Checklist Section */}
-      <section className="space-y-4">
-        <div className="flex justify-between items-end mb-6 mt-4">
-          <h3 className="font-label text-[12px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">Protocolos Atuais</h3>
-          <span className="text-on-surface-variant text-xs">{completedCount} de {items.length} concluídos</span>
-        </div>
+      {subTab === 'hydration' ? (
+        <HydrationAlerts />
+      ) : (
+        <>
+          {/* Priority Filter */}
+          <PriorityFilterChips selectedPriority={priorityFilter} onChange={setPriorityFilter} />
 
-        <div className="space-y-4">
-          {(() => {
-            let displayItems = priorityFilter === 'all' 
-              ? items 
-              : items.filter(i => (i.priority || 'normal') === priorityFilter);
-            
-            displayItems = sortAgendaItems(displayItems);
-            
-            const overdueItems = displayItems.filter(isOverdueUrgent);
-            const regularItems = displayItems.filter(i => !isOverdueUrgent(i));
-            
-            return (
-              <>
-                <OverdueUrgentSection 
-                  items={overdueItems}
-                  onToggle={handleToggle}
-                  onLongPress={handleLongPress}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
+          {/* Habits Checklist Section */}
+          <section className="space-y-4">
+            <div className="flex justify-between items-end mb-6 mt-4">
+              <h3 className="font-label text-[12px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">Protocolos Atuais</h3>
+              <span className="text-on-surface-variant text-xs">{completedCount} de {items.length} concluídos</span>
+            </div>
 
-                {regularItems.map((item) => (
-                  <div 
-                    key={item.id} 
-                    onContextMenu={(e) => { e.preventDefault(); handleLongPress(item); }}
-                    className={`group flex flex-col sm:flex-row items-start sm:items-center bg-surface-container-low p-5 rounded-xl transition-all duration-300 hover:bg-surface-container-high relative
-                      ${item.priority === 'urgent' && !item.completed ? 'border-l-[3px] border-l-[#FF4D4D]' : ''}
-                      ${item.priority === 'important' && !item.completed ? 'border-l-[3px] border-l-[#FFD166]' : ''}
-                    `}
-                  >
-                    <div className="flex-shrink-0 mr-5 mb-3 sm:mb-0">
-                      <motion.button 
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => handleToggle(item.id, item.completed)}
-                        className={`relative overflow-hidden w-10 h-10 rounded-[1rem] flex items-center justify-center transition-all duration-300 cursor-pointer ${
-                          item.completed 
-                            ? "text-[#00210C] shadow-[0_0_20px_rgba(0,255,136,0.2)] border-2 border-transparent" 
-                            : "border-2 border-outline-variant text-transparent hover:border-primary-container hover:text-primary-container"
-                        }`}
+            <div className="space-y-4">
+              {(() => {
+                let displayItems = priorityFilter === 'all' 
+                  ? items 
+                  : items.filter(i => (i.priority || 'normal') === priorityFilter);
+                
+                displayItems = sortAgendaItems(displayItems);
+                
+                const overdueItems = displayItems.filter(isOverdueUrgent);
+                const regularItems = displayItems.filter(i => !isOverdueUrgent(i));
+                
+                return (
+                  <>
+                    <OverdueUrgentSection 
+                      items={overdueItems}
+                      onToggle={handleToggle}
+                      onLongPress={handleLongPress}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                    />
+
+                    {regularItems.map((item) => (
+                      <div 
+                        key={item.id} 
+                        onContextMenu={(e) => { e.preventDefault(); handleLongPress(item); }}
+                        className={`group flex flex-col sm:flex-row items-start sm:items-center bg-surface-container-low p-5 rounded-xl transition-all duration-300 hover:bg-surface-container-high relative
+                          ${item.priority === 'urgent' && !item.completed ? 'border-l-[3px] border-l-[#FF4D4D]' : ''}
+                          ${item.priority === 'important' && !item.completed ? 'border-l-[3px] border-l-[#FFD166]' : ''}
+                        `}
                       >
-                        <AnimatePresence>
-                          {item.completed && (
-                            <motion.div
-                              initial={{ scale: 0, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              exit={{ scale: 0, opacity: 0 }}
-                              transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                              className="absolute inset-0 bg-primary-container"
-                            />
-                          )}
-                        </AnimatePresence>
-                        <motion.span 
-                          initial={false}
-                          animate={{ scale: item.completed ? 1 : 0.5, opacity: item.completed ? 1 : 0 }}
-                          transition={{ type: "spring", stiffness: 300, damping: 25, delay: item.completed ? 0.1 : 0 }}
-                          className="material-symbols-outlined text-xl font-bold relative z-10"
-                        >
-                          check
-                        </motion.span>
-                      </motion.button>
-                    </div>
-                    <div className="flex-grow">
-                      <h4 className={`text-on-surface font-bold text-lg tracking-tight ${item.completed ? "line-through opacity-40" : ""}`}>
-                        {item.title}
-                      </h4>
-                      <div className="flex flex-wrap items-center gap-2 mt-1">
-                        <PriorityTag priority={item.priority} />
-                        <span className="material-symbols-outlined text-[16px] text-primary-container" style={{ fontVariationSettings: "'FILL' 1" }}>
-                          history
-                        </span>
-                        <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mr-2 flex items-center gap-1">
-                          {item.time}
-                          {item.fromTemplate && <Repeat className="w-3 h-3 text-[#B9CBB9] ml-1" title="Tarefa recorrente" />}
-                        </span>
-                        {item.location && (
-                          <>
-                            <span className="material-symbols-outlined text-[16px] text-on-surface-variant">location_on</span>
-                            <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{item.location}</span>
-                          </>
-                        )}
+                        <div className="flex-shrink-0 mr-5 mb-3 sm:mb-0">
+                          <motion.button 
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleToggle(item.id, item.completed)}
+                            className={`relative overflow-hidden w-10 h-10 rounded-[1rem] flex items-center justify-center transition-all duration-300 cursor-pointer ${
+                              item.completed 
+                                ? "text-[#00210C] shadow-[0_0_20px_rgba(0,255,136,0.2)] border-2 border-transparent" 
+                                : "border-2 border-outline-variant text-transparent hover:border-primary-container hover:text-primary-container"
+                            }`}
+                          >
+                            <AnimatePresence>
+                              {item.completed && (
+                                <motion.div
+                                  initial={{ scale: 0, opacity: 0 }}
+                                  animate={{ scale: 1, opacity: 1 }}
+                                  exit={{ scale: 0, opacity: 0 }}
+                                  transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                                  className="absolute inset-0 bg-primary-container"
+                                />
+                              )}
+                            </AnimatePresence>
+                            <motion.span 
+                              initial={false}
+                              animate={{ scale: item.completed ? 1 : 0.5, opacity: item.completed ? 1 : 0 }}
+                              transition={{ type: "spring", stiffness: 300, damping: 25, delay: item.completed ? 0.1 : 0 }}
+                              className="material-symbols-outlined text-xl font-bold relative z-10"
+                            >
+                              check
+                            </motion.span>
+                          </motion.button>
+                        </div>
+                        <div className="flex-grow">
+                          <h4 className={`text-on-surface font-bold text-lg tracking-tight ${item.completed ? "line-through opacity-40" : ""}`}>
+                            {item.title}
+                          </h4>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <PriorityTag priority={item.priority} />
+                            <span className="material-symbols-outlined text-[16px] text-primary-container" style={{ fontVariationSettings: "'FILL' 1" }}>
+                              history
+                            </span>
+                            <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mr-2 flex items-center gap-1">
+                              {item.time}
+                              {item.fromTemplate && <Repeat className="w-3 h-3 text-[#B9CBB9] ml-1" title="Tarefa recorrente" />}
+                            </span>
+                            {item.location && (
+                              <>
+                                <span className="material-symbols-outlined text-[16px] text-on-surface-variant">location_on</span>
+                                <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{item.location}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Context menu actions */}
+                        <div className="absolute right-4 top-4 sm:relative sm:right-auto sm:top-auto flex gap-2 opacity-100 sm:opacity-20 sm:group-hover:opacity-100 transition-opacity ml-auto">
+                          <button 
+                            onClick={() => handleEdit(item)}
+                            className="p-1 hover:text-primary-container hover:bg-surface-container-highest rounded"
+                          >
+                            <span className="material-symbols-outlined text-sm">edit</span>
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(item.id)}
+                            className="p-1 hover:text-error hover:bg-error/10 rounded"
+                          >
+                            <span className="material-symbols-outlined text-sm">delete</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    
-                    {/* Context menu actions */}
-                    <div className="absolute right-4 top-4 sm:relative sm:right-auto sm:top-auto flex gap-2 opacity-100 sm:opacity-20 sm:group-hover:opacity-100 transition-opacity ml-auto">
-                      <button 
-                        onClick={() => handleEdit(item)}
-                        className="p-1 hover:text-primary-container hover:bg-surface-container-highest rounded"
-                      >
-                        <span className="material-symbols-outlined text-sm">edit</span>
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(item.id)}
-                        className="p-1 hover:text-error hover:bg-error/10 rounded"
-                      >
-                        <span className="material-symbols-outlined text-sm">delete</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-            
-                {displayItems.length === 0 && (
-                  <div className="text-center py-10 text-on-surface-variant">
-                    Nenhum protocolo cadastrado para este dia ou filtro.
-                  </div>
-                )}
-              </>
-            );
-          })()}
-        </div>
-      </section>
+                    ))}
+                
+                    {displayItems.length === 0 && (
+                      <div className="text-center py-10 text-on-surface-variant">
+                        Nenhum protocolo cadastrado para este dia ou filtro.
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </section>
 
-      {/* FAB: Add Habit */}
-      <button 
-        onClick={handleAddNew}
-        className="fixed right-6 bottom-28 w-16 h-16 rounded-[1.5rem] bg-gradient-to-br from-[#00E479] to-[#00FF88] text-[#003919] shadow-[0_12px_24px_rgba(0,255,136,0.3)] z-50 flex items-center justify-center transition-transform active:scale-90 duration-150"
-      >
-        <span className="material-symbols-outlined text-3xl font-bold">add</span>
-      </button>
+          {/* FAB: Add Habit */}
+          <button 
+            onClick={handleAddNew}
+            className="fixed right-6 bottom-28 w-16 h-16 rounded-[1.5rem] bg-gradient-to-br from-[#00E479] to-[#00FF88] text-[#003919] shadow-[0_12px_24px_rgba(0,255,136,0.3)] z-50 flex items-center justify-center transition-transform active:scale-90 duration-150"
+          >
+            <span className="material-symbols-outlined text-3xl font-bold">add</span>
+          </button>
+        </>
+      )}
 
       {/* Edit/Create Modal */}
       <AnimatePresence>

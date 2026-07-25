@@ -195,3 +195,16 @@ export interface DailyCheckin {
   intention: string;
   wellbeingPoints: number;
 }
+
+export interface HydrationSettings {
+  enabled: boolean;
+  mode: 'fixed' | 'interval';
+  dailyGoalMl: number;
+  containerVolumeMl: number;
+  fixedTimes: string[];
+  intervalHours: number;
+  intervalStart: string;
+  intervalEnd: string;
+  customMessage: string;
+}
+

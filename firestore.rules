@@ -147,6 +147,10 @@ service cloud.firestore {
       match /recurringTemplates/{templateId} {
         allow read, write: if isOwner(userId);
       }
+
+      match /settings/{settingId} {
+        allow read, write: if isOwner(userId);
+      }
     }
   }
 }
